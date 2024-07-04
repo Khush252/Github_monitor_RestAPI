@@ -28,4 +28,4 @@ async def generate_report(repo_owner, repo_name, access_token, start_date, end_d
 
     report.to_csv(file_path, index=False)
     
-    return file_path
+    return file_path, report

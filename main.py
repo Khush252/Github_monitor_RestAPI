@@ -6,10 +6,11 @@
 # Merge Commits: Merge commits that integrate changes from one branch into another and have multiple parents will be ignored to avoid double-counting.
 
 # API call for generating report
-# With custom date range:      http://localhost:8000/generate_report?start_date=01-06-24&end_date=20-06-24
+# With custom date range:      http://localhost:8001/generate_report?start_date_str=01-06-2024&end_date_str=20-06-2024
 
-# Default to the last 7 days:  http://localhost:8000/generate_report
+# Default to the last 7 days:  http://localhost:8001/generate_report
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import JSONResponse
 from typing import Optional
 from datetime import datetime, timedelta
 import os
@@ -17,7 +18,9 @@ import signal
 import sys
 from src.generate_report import generate_report
 from config import REPO_OWNER, REPO_NAME, ACCESS_TOKEN
+from utils.slack_alert import send_slack_alert
 import httpx
+import pandas as pd
 
 app = FastAPI()
 
@@ -41,7 +44,7 @@ async def generate_report_endpoint(
             end_date = datetime.strptime(end_date_str, date_format)
         else:
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=7)
+            start_date = end_date - timedelta(days=2)
         if start_date > datetime.now() and end_date > datetime.now():
             print("Both Start and End Dates are invalid")
             raise HTTPException(
@@ -67,19 +70,93 @@ async def generate_report_endpoint(
 
     print("Generating report...")
     try:
-        file_path = await generate_report(
+        file_path, report_data = await generate_report(
             REPO_OWNER, REPO_NAME, ACCESS_TOKEN, start_date, end_date
         )
+
+        # Creating the table header
+        report_table = "USERS                TESTS ADDED    PRs CONTRIBUTED\n"
+        report_table += "--------------------------------------------------\n"
+
+        # Adding the data rows
+        for row in report_data.itertuples(index=False, name=None):
+            report_table += f"{row[0]:<20} {row[1]:<12} {row[2]:<16}\n"
+
+        completion_message = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"✅ Report Generated",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Report Path:* `{file_path}`\n*Duration:* {start_date_str} to {end_date_str}"
+                }
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```\n{report_table}\n```"
+                }
+            }
+        ]
+
+        send_slack_alert(completion_message, is_block=True)
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 403:
             print("Rate limit exceeded")
+            rate_limit_message = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "🚫 Rate Limit Exceeded",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Rate limit exceeded while generating the report. Please try again later."
+                    }
+                }
+            ]
+            send_slack_alert(rate_limit_message, is_block=True)
             raise HTTPException(status_code=429, detail="Rate limit exceeded")
         else:
             print("Error generating report")
+            error_message = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "❌ Error Generating Report",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "An error occurred while generating the report. Please check the logs for more details."
+                    }
+                }
+            ]
+            send_slack_alert(error_message, is_block=True)
             raise HTTPException(status_code=500, detail="Error generating report")
     
     print(f"Report Generated for {start_date} to {end_date}")
-    return {"message": "Report generated", "file_path": file_path}
+    return JSONResponse(content={"message": "Report generated", "file_path": file_path}, status_code=200)
 
 
 if __name__ == "__main__":
