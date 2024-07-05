@@ -37,7 +37,8 @@ async def generate_report_endpoint(
     end_date_str: Optional[str] = Query(None),
 ):
     date_format = "%d-%m-%Y"
-
+    start_date=None
+    end_date=None
     try:
         if start_date_str and end_date_str:
             start_date = datetime.strptime(start_date_str, date_format)

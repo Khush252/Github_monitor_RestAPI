@@ -13,11 +13,19 @@ async def analyze_commits_and_prs(repo_owner, repo_name, access_token, start_dat
     user_test_count = defaultdict(int)
     user_pr_count = defaultdict(int)
 
+    def get_author_identifier(commit):
+        if commit['author'] is not None:
+            return commit['author']['login']
+        return commit['commit']['author']['name']
+
     for commit in all_commits:
         if len(commit['parents']) == 1:
-            author = commit['commit']['author']['name']
-            test_count_change = await analyze_commit(commit['sha'], repo_owner, repo_name, access_token)
-            user_test_count[author] += test_count_change
+            author = get_author_identifier(commit)
+            if author:
+                test_count_change = await analyze_commit(commit['sha'], repo_owner, repo_name, access_token)
+                user_test_count[author] += test_count_change
+            else:
+                print(f"Commit {commit['sha']} does not have an associated author. Skipping this commit.")
 
     all_prs = await fetch_closed_prs(repo_owner, repo_name, access_token, start_date, end_date)
     
@@ -27,8 +35,11 @@ async def analyze_commits_and_prs(repo_owner, repo_name, access_token, start_dat
         unique_authors = set()
 
         for commit in commits_in_pr:
-            commit_author = commit['commit']['author']['name']
-            unique_authors.add(commit_author)
+            author = get_author_identifier(commit)
+            if author:
+                unique_authors.add(author)
+            else:
+                print(f"Commit {commit['sha']} in PR #{pr_number} does not have an associated author. Skipping this commit.")
 
         for author in unique_authors:
             user_pr_count[author] += 1
