@@ -8,7 +8,10 @@ async def get_httpx_client():
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def fetch_default_branch(repo_owner, repo_name, access_token):
     repo_url = f'https://api.github.com/repos/{repo_owner}/{repo_name}'
-    headers = {'Authorization': f'token {access_token}'}
+    headers = {
+        'Authorization': f'token {access_token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     
     async with (await get_httpx_client()) as client:
         response = await client.get(repo_url, headers=headers)
@@ -18,15 +21,18 @@ async def fetch_default_branch(repo_owner, repo_name, access_token):
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def fetch_commit_diff(commit_sha, repo_owner, repo_name, access_token):
-    url = f'https://github.com/{repo_owner}/{repo_name}/commit/{commit_sha}.diff'
-    headers = {'Authorization': f'token {access_token}'}
+    url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/commits/{commit_sha}'
+    headers = {
+        'Authorization': f'token {access_token}',
+        'Accept': 'application/vnd.github.v3.diff'
+    }
     async with (await get_httpx_client()) as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 403:
-                print("Rate limit exceeded while fetching commit diff")
+                print("Rate limit exceeded or access denied while fetching commit diff")
             else:
                 print(f"Error fetching commit diff: {exc.response.status_code} - {exc.response.text}")
             raise
@@ -39,7 +45,10 @@ async def fetch_commits_from_github(repo_owner, repo_name, access_token, start_d
     
     default_branch = await fetch_default_branch(repo_owner, repo_name, access_token)
     commits_url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/commits'
-    headers = {'Authorization': f'token {access_token}'}
+    headers = {
+        'Authorization': f'token {access_token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     params = {
         'since': since_str,
         'until': until_str,
@@ -60,7 +69,8 @@ async def fetch_commits_from_github(repo_owner, repo_name, access_token, start_d
                     print(f"Error fetching commits: {exc.response.status_code} - {exc.response.text}")
                     return all_commits  # Return empty list if repository or commits not found
                 elif exc.response.status_code == 403:
-                    print("Rate limit exceeded while fetching commits")
+                    print("Access denied or rate limit exceeded while fetching commits")
+                    return all_commits  # Return empty list if access is denied
                 else:
                     print(f"Error fetching commits: {exc.response.status_code} - {exc.response.text}")
                 raise
@@ -74,7 +84,10 @@ async def fetch_commits_from_github(repo_owner, repo_name, access_token, start_d
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def fetch_closed_prs(repo_owner, repo_name, access_token, start_date, end_date):
-    headers = {'Authorization': f'token {access_token}'}
+    headers = {
+        'Authorization': f'token {access_token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/pulls'
     params = {
         'state': 'closed',  # Fetch only closed PRs
@@ -92,7 +105,8 @@ async def fetch_closed_prs(repo_owner, repo_name, access_token, start_date, end_
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 403:
-                    print("Rate limit exceeded while fetching closed PRs")
+                    print("Access denied or rate limit exceeded while fetching closed PRs")
+                    return all_prs  # Return empty list if access is denied
                 else:
                     print(f"Error fetching closed PRs: {exc.response.status_code} - {exc.response.text}")
                 raise
@@ -111,7 +125,10 @@ async def fetch_closed_prs(repo_owner, repo_name, access_token, start_date, end_
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def fetch_commits_in_pr(repo_owner, repo_name, pr_number, access_token):
     url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/commits'
-    headers = {'Authorization': f'token {access_token}'}
+    headers = {
+        'Authorization': f'token {access_token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     params = {'per_page': 100, 'page': 1}
     commits = []
 
@@ -122,7 +139,8 @@ async def fetch_commits_in_pr(repo_owner, repo_name, pr_number, access_token):
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 403:
-                    print(f"Rate limit exceeded while fetching commits for PR #{pr_number}")
+                    print(f"Access denied or rate limit exceeded while fetching commits for PR #{pr_number}")
+                    return commits  # Return empty list if access is denied
                 else:
                     print(f"Error fetching commits for PR #{pr_number}: {exc.response.status_code} - {exc.response.text}")
                 raise
