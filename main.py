@@ -1,14 +1,3 @@
-# main.py
-
-# Direct Commits: Commits made directly to the main branch will be captured as they have a single parent.
-# Squashed Commits: When commits are squashed and merged, they will also appear as single-parent commits and will be included in the analysis.
-# Rebase and Merge Commits: After rebase and merge, the rebased commits will appear as if they were made directly on top of the main branch, each having a single parent.
-# Merge Commits: Merge commits that integrate changes from one branch into another and have multiple parents will be ignored to avoid double-counting.
-
-# API call for generating report
-# With custom date range:      http://localhost:8001/generate_report?start_date_str=01-06-2024&end_date_str=20-06-2024
-
-# Default to the last 7 days:  http://localhost:8001/generate_report
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -37,15 +26,16 @@ async def generate_report_endpoint(
     end_date_str: Optional[str] = Query(None),
 ):
     date_format = "%d-%m-%Y"
-    start_date=None
-    end_date=None
     try:
         if start_date_str and end_date_str:
             start_date = datetime.strptime(start_date_str, date_format)
             end_date = datetime.strptime(end_date_str, date_format)
         else:
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=2)
+            start_date = end_date - timedelta(days=7)  # Adjusted to default to the last 7 days
+            start_date_str = start_date.strftime(date_format)
+            end_date_str = end_date.strftime(date_format)
+
         if start_date > datetime.now() and end_date > datetime.now():
             print("Both Start and End Dates are invalid")
             raise HTTPException(
