@@ -1,3 +1,8 @@
+
+
+#GET
+#http://localhost:8001/generate_report?start_date_str=01-05-2024&end_date_str=27-06-2024
+
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -12,6 +17,9 @@ import httpx
 import pandas as pd
 
 app = FastAPI()
+
+# GET
+# http://localhost:8001/generate_report?start_date_str=01-05-2024&end_date_str=27-06-2024
 
 def handle_shutdown(signum, frame):
     print(f"Received signal {signum}, shutting down gracefully...")
@@ -146,7 +154,7 @@ async def generate_report_endpoint(
             send_slack_alert(error_message, is_block=True)
             raise HTTPException(status_code=500, detail="Error generating report")
     
-    print(f"Report Generated for {start_date} to {end_date}")
+    print(f"Report Generated for {start_date_str} to {end_date_str}")
     return JSONResponse(content={"message": "Report generated", "file_path": file_path}, status_code=200)
 
 
